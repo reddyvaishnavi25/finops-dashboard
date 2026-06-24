@@ -1,13 +1,22 @@
 import { Pool, type ClientBase } from "pg"
 import { DsqlSigner } from "@aws-sdk/dsql-signer"
 import { awsCredentialsProvider } from "@vercel/functions/oidc"
+import { fromNodeProviderChain } from "@aws-sdk/credential-providers"
 import { attachDatabasePool } from "@vercel/functions"
 
+// Environment-aware AWS credentials:
+// - On Vercel/v0 a VERCEL_OIDC_TOKEN is present, so assume the project's role via OIDC.
+// - Locally (e.g. a teammate in VSCode) there is no OIDC token, so fall back to the
+//   standard AWS credential chain, which reads AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY.
+const credentials = process.env.VERCEL_OIDC_TOKEN
+  ? awsCredentialsProvider({
+      roleArn: process.env.AWS_ROLE_ARN,
+      clientConfig: { region: process.env.AWS_REGION },
+    })
+  : fromNodeProviderChain({ clientConfig: { region: process.env.AWS_REGION } })
+
 const signer = new DsqlSigner({
-  credentials: awsCredentialsProvider({
-    roleArn: process.env.AWS_ROLE_ARN,
-    clientConfig: { region: process.env.AWS_REGION },
-  }),
+  credentials,
   region: process.env.AWS_REGION,
   hostname: process.env.PGHOST,
   expiresIn: 900,

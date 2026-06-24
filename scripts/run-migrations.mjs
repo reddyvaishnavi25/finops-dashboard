@@ -7,15 +7,21 @@ import { fileURLToPath } from "node:url"
 import pg from "pg"
 import { DsqlSigner } from "@aws-sdk/dsql-signer"
 import { awsCredentialsProvider } from "@vercel/functions/oidc"
+import { fromNodeProviderChain } from "@aws-sdk/credential-providers"
 
 const { Pool } = pg
 const scriptsDir = dirname(fileURLToPath(import.meta.url))
 
+// Use Vercel OIDC when available (in v0/Vercel), otherwise fall back to local AWS keys.
+const credentials = process.env.VERCEL_OIDC_TOKEN
+  ? awsCredentialsProvider({
+      roleArn: process.env.AWS_ROLE_ARN,
+      clientConfig: { region: process.env.AWS_REGION },
+    })
+  : fromNodeProviderChain({ clientConfig: { region: process.env.AWS_REGION } })
+
 const signer = new DsqlSigner({
-  credentials: awsCredentialsProvider({
-    roleArn: process.env.AWS_ROLE_ARN,
-    clientConfig: { region: process.env.AWS_REGION },
-  }),
+  credentials,
   region: process.env.AWS_REGION,
   hostname: process.env.PGHOST,
   expiresIn: 900,
