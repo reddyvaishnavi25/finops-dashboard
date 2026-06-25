@@ -1,7 +1,14 @@
 // Seeds the FinOps DB with realistic dummy data.
 // Run: node --env-file-if-exists=/vercel/share/.env.project scripts/seed.mjs
-import { randomUUID } from "node:crypto"
+import { randomUUID, createHash } from "node:crypto"
 import pg from "pg"
+
+// Deterministic UUIDv5-ish id from a name, so re-seeding reuses the same
+// tenant/workspace rows instead of creating duplicates.
+function stableId(name) {
+  const h = createHash("sha256").update(name).digest("hex")
+  return [h.slice(0, 8), h.slice(8, 12), "5" + h.slice(13, 16), "8" + h.slice(17, 20), h.slice(20, 32)].join("-")
+}
 import { DsqlSigner } from "@aws-sdk/dsql-signer"
 import { awsCredentialsProvider } from "@vercel/functions/oidc"
 import { fromNodeProviderChain } from "@aws-sdk/credential-providers"
@@ -217,17 +224,22 @@ function rollups(rows) {
 async function main() {
   console.log("[v0] connecting to Aurora DSQL...")
 
-  // 1. Tenants + workspaces
-  const tenantRows = TENANTS.map((t) => ({ ...t, tenant_id: randomUUID() }))
+  // 1. Tenants + workspaces (deterministic ids + upsert => idempotent)
+  const tenantRows = TENANTS.map((t) => ({ ...t, tenant_id: stableId("tenant:" + t.company_name) }))
   for (const t of tenantRows) {
     await pool.query(
-      `INSERT INTO tenants (tenant_id, company_name, subscription_tier) VALUES ($1,$2,$3)`,
+      `INSERT INTO tenants (tenant_id, company_name, subscription_tier) VALUES ($1,$2,$3)
+       ON CONFLICT (tenant_id) DO NOTHING`,
       [t.tenant_id, t.company_name, t.subscription_tier],
     )
-    t.workspaceRows = t.workspaces.map((name) => ({ workspace_id: randomUUID(), workspace_name: name }))
+    t.workspaceRows = t.workspaces.map((name) => ({
+      workspace_id: stableId("ws:" + t.company_name + ":" + name),
+      workspace_name: name,
+    }))
     for (const w of t.workspaceRows) {
       await pool.query(
-        `INSERT INTO workspaces (workspace_id, tenant_id, workspace_name) VALUES ($1,$2,$3)`,
+        `INSERT INTO workspaces (workspace_id, tenant_id, workspace_name) VALUES ($1,$2,$3)
+         ON CONFLICT (workspace_id) DO NOTHING`,
         [w.workspace_id, t.tenant_id, w.workspace_name],
       )
     }
@@ -248,21 +260,39 @@ async function main() {
   for (const e of endpoint) {
     await pool.query(
       `INSERT INTO endpoint_cost_summary (tenant_id, workspace_id, api_endpoint, total_cost, request_count, total_tokens)
-       VALUES ($1,$2,$3,$4,$5,$6)`,
+       VALUES ($1,$2,$3,$4,$5,$6)
+       ON CONFLICT (tenant_id, workspace_id, api_endpoint) DO UPDATE SET
+         total_cost = endpoint_cost_summary.total_cost + EXCLUDED.total_cost,
+         request_count = endpoint_cost_summary.request_count + EXCLUDED.request_count,
+         total_tokens = endpoint_cost_summary.total_tokens + EXCLUDED.total_tokens,
+         version = endpoint_cost_summary.version + 1,
+         updated_at = CURRENT_TIMESTAMP`,
       [e.tenant_id, e.workspace_id, e.api_endpoint, e.total_cost.toFixed(6), e.request_count, e.total_tokens],
     )
   }
   for (const t of tenant) {
     await pool.query(
       `INSERT INTO tenant_usage_summary (tenant_id, total_cost, total_requests, total_tokens)
-       VALUES ($1,$2,$3,$4)`,
+       VALUES ($1,$2,$3,$4)
+       ON CONFLICT (tenant_id) DO UPDATE SET
+         total_cost = tenant_usage_summary.total_cost + EXCLUDED.total_cost,
+         total_requests = tenant_usage_summary.total_requests + EXCLUDED.total_requests,
+         total_tokens = tenant_usage_summary.total_tokens + EXCLUDED.total_tokens,
+         version = tenant_usage_summary.version + 1,
+         updated_at = CURRENT_TIMESTAMP`,
       [t.tenant_id, t.total_cost.toFixed(6), t.total_requests, t.total_tokens],
     )
   }
   for (const f of feature) {
     await pool.query(
       `INSERT INTO feature_usage_summary (tenant_id, feature_name, total_cost, total_requests, total_tokens)
-       VALUES ($1,$2,$3,$4,$5)`,
+       VALUES ($1,$2,$3,$4,$5)
+       ON CONFLICT (tenant_id, feature_name) DO UPDATE SET
+         total_cost = feature_usage_summary.total_cost + EXCLUDED.total_cost,
+         total_requests = feature_usage_summary.total_requests + EXCLUDED.total_requests,
+         total_tokens = feature_usage_summary.total_tokens + EXCLUDED.total_tokens,
+         version = feature_usage_summary.version + 1,
+         updated_at = CURRENT_TIMESTAMP`,
       [f.tenant_id, f.feature_name, f.total_cost.toFixed(6), f.total_requests, f.total_tokens],
     )
   }

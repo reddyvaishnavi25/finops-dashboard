@@ -49,4 +49,102 @@ export async function withConnection<T>(fn: (client: ClientBase) => Promise<T>):
   }
 }
 
+// ---------------------------------------------------------------------------
+// Optimistic Concurrency Control (OCC) retry
+// ---------------------------------------------------------------------------
+// Aurora DSQL is lock-free: it detects write/write conflicts at COMMIT time and
+// aborts one of the transactions with SQLSTATE 40001 (serialization_failure) /
+// "OC001". The correct response is to retry the whole transaction. This wrapper
+// runs `fn` and retries on those conflicts with exponential backoff + jitter.
+const OCC_CONFLICT_CODES = new Set(["40001", "OC000", "OC001"])
+
+export class ConcurrencyConflictError extends Error {
+  constructor(
+    public attempts: number,
+    public lastError: unknown,
+  ) {
+    super(`OCC conflict not resolved after ${attempts} attempts`)
+    this.name = "ConcurrencyConflictError"
+  }
+}
+
+export interface RetryResult<T> {
+  value: T
+  attempts: number // total tries (1 = succeeded first time, no conflict)
+  retries: number // number of conflict-driven retries
+}
+
+function isOccConflict(err: unknown): boolean {
+  const code = (err as { code?: string })?.code
+  const msg = (err as { message?: string })?.message ?? ""
+  return (!!code && OCC_CONFLICT_CODES.has(code)) || /OC0|concurrent|serializ/i.test(msg)
+}
+
+export async function withRetry<T>(
+  fn: () => Promise<T>,
+  opts: { maxAttempts?: number; baseDelayMs?: number } = {},
+): Promise<RetryResult<T>> {
+  const maxAttempts = opts.maxAttempts ?? 25
+  const baseDelayMs = opts.baseDelayMs ?? 10
+  let lastError: unknown
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const value = await fn()
+      return { value, attempts: attempt, retries: attempt - 1 }
+    } catch (err) {
+      lastError = err
+      if (!isOccConflict(err) || attempt === maxAttempts) {
+        if (isOccConflict(err)) throw new ConcurrencyConflictError(attempt, err)
+        throw err
+      }
+      // Exponential backoff with full jitter.
+      const delay = Math.min(baseDelayMs * 2 ** (attempt - 1), 250)
+      await new Promise((r) => setTimeout(r, Math.random() * delay))
+    }
+  }
+  throw new ConcurrencyConflictError(maxAttempts, lastError)
+}
+
+// Runs a function inside a BEGIN/COMMIT transaction on a dedicated client, and
+// wraps the whole thing in withRetry so OCC conflicts replay the transaction.
+export async function withTransactionRetry<T>(
+  fn: (client: ClientBase) => Promise<T>,
+  opts?: { maxAttempts?: number; baseDelayMs?: number },
+): Promise<RetryResult<T>> {
+  return withRetry(async () => {
+    return withConnection(async (client) => {
+      await client.query("BEGIN")
+      try {
+        const result = await fn(client)
+        await client.query("COMMIT")
+        return result
+      } catch (err) {
+        try {
+          await client.query("ROLLBACK")
+        } catch {
+          /* ignore rollback errors */
+        }
+        throw err
+      }
+    })
+  }, opts)
+}
+
+// ---------------------------------------------------------------------------
+// Application-layer referential integrity (DSQL has no foreign keys)
+// ---------------------------------------------------------------------------
+export async function tenantExists(tenantId: string): Promise<boolean> {
+  const res = await pool.query("SELECT 1 FROM tenants WHERE tenant_id = $1", [tenantId])
+  return res.rowCount! > 0
+}
+
+export async function workspaceBelongsToTenant(workspaceId: string, tenantId: string): Promise<boolean> {
+  const res = await pool.query("SELECT 1 FROM workspaces WHERE workspace_id = $1 AND tenant_id = $2", [
+    workspaceId,
+    tenantId,
+  ])
+  return res.rowCount! > 0
+}
+
 export { pool }
