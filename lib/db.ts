@@ -4,16 +4,23 @@ import { awsCredentialsProvider } from "@vercel/functions/oidc"
 import { fromNodeProviderChain } from "@aws-sdk/credential-providers"
 import { attachDatabasePool } from "@vercel/functions"
 
-// Environment-aware AWS credentials:
-// - On Vercel/v0 a VERCEL_OIDC_TOKEN is present, so assume the project's role via OIDC.
-// - Locally (e.g. a teammate in VSCode) there is no OIDC token, so fall back to the
-//   standard AWS credential chain, which reads AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY.
-const credentials = process.env.VERCEL_OIDC_TOKEN
-  ? awsCredentialsProvider({
+// Environment-aware AWS credentials.
+// IMPORTANT: do NOT gate on process.env.VERCEL_OIDC_TOKEN here. In a deployed
+// Vercel function the OIDC token is injected per-request and is NOT present in
+// process.env at module load (cold start), so checking it here would wrongly
+// fall back to the node provider chain and fail with "no credentials".
+//
+// awsCredentialsProvider reads the OIDC token lazily at call time, so it works
+// both at cold start and per request. We only use the standard AWS credential
+// chain when real static keys are present (e.g. a teammate running locally with
+// an IAM user's AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY).
+const useStaticAwsKeys = !!process.env.AWS_ACCESS_KEY_ID
+const credentials = useStaticAwsKeys
+  ? fromNodeProviderChain({ clientConfig: { region: process.env.AWS_REGION } })
+  : awsCredentialsProvider({
       roleArn: process.env.AWS_ROLE_ARN,
       clientConfig: { region: process.env.AWS_REGION },
     })
-  : fromNodeProviderChain({ clientConfig: { region: process.env.AWS_REGION } })
 
 const signer = new DsqlSigner({
   credentials,

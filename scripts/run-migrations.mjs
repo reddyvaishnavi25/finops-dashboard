@@ -12,13 +12,14 @@ import { fromNodeProviderChain } from "@aws-sdk/credential-providers"
 const { Pool } = pg
 const scriptsDir = dirname(fileURLToPath(import.meta.url))
 
-// Use Vercel OIDC when available (in v0/Vercel), otherwise fall back to local AWS keys.
-const credentials = process.env.VERCEL_OIDC_TOKEN
-  ? awsCredentialsProvider({
+// Use static AWS keys when present (local IAM user), otherwise use Vercel OIDC
+// (which reads the token lazily). Don't gate on VERCEL_OIDC_TOKEN presence.
+const credentials = process.env.AWS_ACCESS_KEY_ID
+  ? fromNodeProviderChain({ clientConfig: { region: process.env.AWS_REGION } })
+  : awsCredentialsProvider({
       roleArn: process.env.AWS_ROLE_ARN,
       clientConfig: { region: process.env.AWS_REGION },
     })
-  : fromNodeProviderChain({ clientConfig: { region: process.env.AWS_REGION } })
 
 const signer = new DsqlSigner({
   credentials,
