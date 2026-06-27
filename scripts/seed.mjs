@@ -111,10 +111,30 @@ const CATALOG = [
     unitCost: 0.00002,
     tokenRange: null,
   },
+  {
+    provider: "Anthropic",
+    feature: "Code Assistant",
+    service: "claude-code",
+    model: "claude-sonnet-4-6",
+    endpoints: ["/v1/messages"],
+    usage_type: "tokens",
+    unitCost: 0.000003,
+    tokenRange: [800, 12000],
+  },
+  {
+    provider: "OpenAI",
+    feature: "Code Assistant",
+    service: "codex",
+    model: "gpt-4o",
+    endpoints: ["/v1/chat/completions"],
+    usage_type: "tokens",
+    unitCost: 0.000005,
+    tokenRange: [600, 10000],
+  },
 ]
 
-const TOTAL_TXNS = 2000
-const DAYS_BACK = 90
+const TOTAL_TXNS = 5000
+const DAYS_BACK = 180
 const BATCH_SIZE = 500 // well under DSQL's 3000-row / 10 MiB transaction limits
 
 const randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min
@@ -122,11 +142,33 @@ const pick = (arr) => arr[randInt(0, arr.length - 1)]
 
 function buildTransactions(tenants) {
   const rows = []
-  for (let i = 0; i < TOTAL_TXNS; i++) {
+  let totalIter = 0
+  const maxIter = TOTAL_TXNS * 5
+
+  // Choose spike days: for each provider, one random day per 30-day window
+  const providers = [...new Set(CATALOG.map(c => c.provider))]
+  const spikeDays = new Set()
+  for (const provider of providers) {
+    for (let windowStart = 0; windowStart < DAYS_BACK; windowStart += 30) {
+      const spikeDay = randInt(windowStart + 2, Math.min(windowStart + 28, DAYS_BACK))
+      spikeDays.add(`${provider}:${spikeDay}`)
+    }
+  }
+
+  while (rows.length < TOTAL_TXNS && totalIter < maxIter) {
+    totalIter++
     const tenant = pick(tenants)
     const workspace = pick(tenant.workspaceRows)
     const c = pick(CATALOG)
     const endpoint = pick(c.endpoints)
+
+    // Bias toward recent days (min of two uniforms weights toward 0 = recent)
+    const daysAgo = Math.round(Math.min(Math.random() * DAYS_BACK, Math.random() * DAYS_BACK))
+    const created = new Date(Date.now() - daysAgo * 86400000 - randInt(0, 86399) * 1000)
+
+    // Weekday pattern: skip ~65% of weekend entries
+    const dow = created.getDay()
+    if ((dow === 0 || dow === 6) && Math.random() > 0.35) continue
 
     let usageQuantity
     let tokenCount = null
@@ -147,8 +189,11 @@ function buildTransactions(tenants) {
       cost = usageQuantity * c.unitCost
     }
 
-    const daysAgo = randInt(0, DAYS_BACK)
-    const created = new Date(Date.now() - daysAgo * 86400000 - randInt(0, 86399) * 1000)
+    // Spike: multiply cost by 5-8x on spike days
+    const spikeKey = `${c.provider}:${daysAgo}`
+    if (spikeDays.has(spikeKey)) {
+      cost = cost * (5 + Math.random() * 3)
+    }
 
     rows.push({
       transaction_id: randomUUID(),
@@ -166,6 +211,7 @@ function buildTransactions(tenants) {
       created_at: created.toISOString(),
     })
   }
+  console.log(`[v0] generated ${rows.length} transactions (${totalIter} iterations)`)
   return rows
 }
 

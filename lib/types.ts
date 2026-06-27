@@ -58,3 +58,38 @@ export interface FeatureUsageSummary {
   version: number
   updated_at: string
 }
+
+export interface ProviderSummary {
+  service_provider: string
+  total_cost: string
+  total_requests: string
+  total_tokens: string
+}
+
+export interface DailySummary {
+  day: string
+  total_cost: string
+  total_requests: string
+  total_tokens: string
+}
+
+export interface AnomalyRow {
+  service_provider: string
+  day: string
+  daily_cost: string
+  avg_cost: string
+  ratio: string
+}
+
+export interface UsageTypeSummary {
+  usage_type: string
+  total_cost: string
+  total_requests: string
+}
+
+export interface TenantWithSummary extends Tenant {
+  total_cost: string | null
+  total_requests: string | null
+  total_tokens: string | null
+  last_activity: string | null
+}
