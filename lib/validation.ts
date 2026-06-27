@@ -33,3 +33,13 @@ export const transactionsQuerySchema = z.object({
   tenantId: z.string().uuid(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
 })
+
+export const daysQuerySchema = z.object({
+  tenantId: z.string().uuid(),
+  days: z.coerce.number().int().min(1).max(90).default(30),
+})
+
+export const anomalyQuerySchema = z.object({
+  tenantId: z.string().uuid(),
+  days: z.coerce.number().int().min(1).max(90).default(30),
+})

@@ -16,16 +16,16 @@ import { attachDatabasePool } from "@vercel/functions"
 // an IAM user's AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY).
 const useStaticAwsKeys = !!process.env.AWS_ACCESS_KEY_ID
 const credentials = useStaticAwsKeys
-  ? fromNodeProviderChain({ clientConfig: { region: process.env.AWS_REGION } })
+  ? fromNodeProviderChain({ clientConfig: { region: process.env.AWS_REGION ?? '' } })
   : awsCredentialsProvider({
-      roleArn: process.env.AWS_ROLE_ARN,
-      clientConfig: { region: process.env.AWS_REGION },
+      roleArn: process.env.AWS_ROLE_ARN ?? '',
+      clientConfig: { region: process.env.AWS_REGION ?? '' },
     })
 
 const signer = new DsqlSigner({
   credentials,
-  region: process.env.AWS_REGION,
-  hostname: process.env.PGHOST,
+  region: process.env.AWS_REGION ?? '',
+  hostname: process.env.PGHOST ?? '',
   expiresIn: 900,
 })
 
