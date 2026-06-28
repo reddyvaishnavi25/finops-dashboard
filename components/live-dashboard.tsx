@@ -2,15 +2,11 @@
 
 import { useState } from "react"
 import useSWR from "swr"
-import { MetricCard } from "@/components/metric-card"
-import { DollarSign, Zap, Hash, Layers, Plus, Rocket, Loader2 } from "lucide-react"
+import { Plus, Rocket, Loader2 } from "lucide-react"
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 interface TenantSummary {
-  total_cost: string
-  total_requests: string
-  total_tokens: string
   version: number
 }
 
@@ -36,9 +32,6 @@ interface BurstStats {
 interface Props {
   tenantId: string
 }
-
-const money = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-const compact = (n: number) => Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 }).format(n)
 
 export function LiveDashboard({ tenantId }: Props) {
   const [busy, setBusy] = useState<null | "single" | "burst">(null)
@@ -117,20 +110,8 @@ export function LiveDashboard({ tenantId }: Props) {
     }
   }
 
-  const totalCost = summary ? Number(summary.total_cost) : 0
-  const totalRequests = summary ? Number(summary.total_requests) : 0
-  const totalTokens = summary ? Number(summary.total_tokens) : 0
-
   return (
     <div className="flex flex-col gap-6">
-      {/* Live metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <MetricCard title="Total Cost" value={money(totalCost)} unit="all-time" icon={<DollarSign className="w-5 h-5" />} />
-        <MetricCard title="Total Requests" value={compact(totalRequests)} unit="ingested" icon={<Zap className="w-5 h-5" />} />
-        <MetricCard title="Total Tokens" value={compact(totalTokens)} unit="processed" icon={<Hash className="w-5 h-5" />} />
-        <MetricCard title="Summary Version" value={`v${summary?.version ?? 0}`} unit="OCC updates" icon={<Layers className="w-5 h-5" />} />
-      </div>
-
       {/* Live transactions feed */}
       <div
         className="rounded-xl p-6"

@@ -5,7 +5,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Cell,
 } from 'recharts'
-import type { FeatureUsageSummary } from '@/lib/types'
+import type { WorkspaceDetail } from '@/lib/types'
 
 const fetcher = (url: string) => fetch(url).then(r => r.json())
 
@@ -16,7 +16,7 @@ interface Props {
 
 interface TooltipPayload {
   value: number
-  payload: FeatureUsageSummary & { requests: number }
+  payload: WorkspaceDetail & { cost: number; requests: number }
 }
 
 function CustomTooltip({ active, payload, label }: { active?: boolean; payload?: TooltipPayload[]; label?: string }) {
@@ -37,14 +37,16 @@ function CustomTooltip({ active, payload, label }: { active?: boolean; payload?:
   )
 }
 
-export function FeatureBarChart({ tenantId, days }: Props) {
-  const { data: res } = useSWR<{ data: FeatureUsageSummary[] }>(
-    tenantId ? `/api/summary/features?tenantId=${tenantId}&days=${days}` : null,
+const WS_COLORS = ['#22d3ee', '#a855f7', '#e91e63', '#f59e0b', '#10b981']
+
+export function WorkspaceBreakdownChart({ tenantId, days }: Props) {
+  const { data: res } = useSWR<{ data: WorkspaceDetail[] }>(
+    tenantId ? `/api/summary/workspaces-detail?tenantId=${tenantId}&days=${days}` : null,
     fetcher,
     { refreshInterval: 5000 },
   )
 
-  const rows = (res?.data ?? []).slice(0, 8).map(r => ({
+  const rows = (res?.data ?? []).map(r => ({
     ...r,
     cost: Number(r.total_cost),
     requests: Number(r.total_requests),
@@ -66,7 +68,7 @@ export function FeatureBarChart({ tenantId, days }: Props) {
       <div className="relative z-10">
         <div className="mb-4">
           <h3 className="text-base font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 to-purple-400">
-            Cost by Feature
+            Cost by Workspace
           </h3>
           <p className="text-xs text-muted-foreground mt-0.5">Last {days === 1 ? '24h' : `${days} days`}</p>
         </div>
@@ -89,18 +91,15 @@ export function FeatureBarChart({ tenantId, days }: Props) {
               />
               <YAxis
                 type="category"
-                dataKey="feature_name"
-                width={130}
+                dataKey="workspace_name"
+                width={100}
                 stroke="oklch(0.65 0 0)"
                 tick={{ fill: 'oklch(0.65 0 0)', fontSize: 11 }}
               />
               <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
               <Bar dataKey="cost" radius={[0, 4, 4, 0]} isAnimationActive animationDuration={600}>
                 {rows.map((_, i) => (
-                  <Cell
-                    key={i}
-                    fill={`hsl(${270 - i * 18}, 80%, ${55 + i * 3}%)`}
-                  />
+                  <Cell key={i} fill={WS_COLORS[i % WS_COLORS.length]} fillOpacity={0.85} />
                 ))}
               </Bar>
             </BarChart>

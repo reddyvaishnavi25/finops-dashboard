@@ -18,6 +18,7 @@ const USAGE_LABELS: Record<string, string> = {
 
 interface Props {
   tenantId: string
+  days: number
 }
 
 interface TooltipPayload {
@@ -44,9 +45,9 @@ function CustomTooltip({ active, payload }: { active?: boolean; payload?: Toolti
   )
 }
 
-export function UsageTypeDonutChart({ tenantId }: Props) {
+export function UsageTypeDonutChart({ tenantId, days }: Props) {
   const { data: res } = useSWR<{ data: UsageTypeSummary[] }>(
-    tenantId ? `/api/summary/usage-types?tenantId=${tenantId}` : null,
+    tenantId ? `/api/summary/usage-types?tenantId=${tenantId}&days=${days}` : null,
     fetcher,
     { refreshInterval: 5000 },
   )
@@ -79,7 +80,7 @@ export function UsageTypeDonutChart({ tenantId }: Props) {
           <h3 className="text-base font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 to-purple-400">
             Spend by Usage Type
           </h3>
-          <p className="text-xs text-muted-foreground mt-0.5">Tokens vs images vs minutes</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Last {days === 1 ? '24h' : `${days} days`}</p>
         </div>
 
         {!res ? (

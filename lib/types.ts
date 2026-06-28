@@ -93,3 +93,25 @@ export interface TenantWithSummary extends Tenant {
   total_tokens: string | null
   last_activity: string | null
 }
+
+export interface GlobalSummary {
+  total_spend: string
+  total_requests: string
+  total_tokens: string
+  active_tenants: string
+  today_spend: string
+}
+
+export interface ModelSummary {
+  model_name: string
+  total_cost: string
+  total_requests: string
+  total_tokens: string
+}
+
+export interface WorkspaceDetail {
+  workspace_name: string
+  total_cost: string
+  total_requests: string
+  total_tokens: string
+}
