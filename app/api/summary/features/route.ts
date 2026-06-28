@@ -1,24 +1,27 @@
 import type { NextRequest } from "next/server"
 import { query } from "@/lib/db"
-import { tenantQuerySchema } from "@/lib/validation"
+import { daysQuerySchema } from "@/lib/validation"
 import { ok, handleError } from "@/lib/api"
-import type { FeatureUsageSummary } from "@/lib/types"
 
 export const dynamic = "force-dynamic"
 
-// GET /api/summary/features?tenantId= — per-feature usage breakdown.
 export async function GET(req: NextRequest) {
   try {
-    const { tenantId } = tenantQuerySchema.parse({
+    const { tenantId, days } = daysQuerySchema.parse({
       tenantId: req.nextUrl.searchParams.get("tenantId"),
+      days: req.nextUrl.searchParams.get("days") ?? undefined,
     })
-    const res = await query<FeatureUsageSummary>(
-      `SELECT tenant_id, feature_name, total_cost, total_requests, total_tokens,
-              version, updated_at
-       FROM feature_usage_summary
+    const res = await query(
+      `SELECT feature_name,
+              SUM(cost)::text                     AS total_cost,
+              COUNT(*)::text                      AS total_requests,
+              COALESCE(SUM(token_count), 0)::text AS total_tokens
+       FROM ledger_transactions
        WHERE tenant_id = $1
-       ORDER BY total_cost DESC`,
-      [tenantId],
+         AND created_at >= NOW() - ($2 || ' days')::INTERVAL
+       GROUP BY feature_name
+       ORDER BY SUM(cost) DESC`,
+      [tenantId, days],
     )
     return ok(res.rows)
   } catch (err) {

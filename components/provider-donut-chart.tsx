@@ -9,6 +9,7 @@ const fetcher = (url: string) => fetch(url).then(r => r.json())
 
 interface Props {
   tenantId: string
+  days: number
 }
 
 interface TooltipPayload {
@@ -35,9 +36,9 @@ function CustomTooltip({ active, payload }: { active?: boolean; payload?: Toolti
   )
 }
 
-export function ProviderDonutChart({ tenantId }: Props) {
+export function ProviderDonutChart({ tenantId, days }: Props) {
   const { data: res } = useSWR<{ data: ProviderSummary[] }>(
-    tenantId ? `/api/summary/providers?tenantId=${tenantId}` : null,
+    tenantId ? `/api/summary/providers?tenantId=${tenantId}&days=${days}` : null,
     fetcher,
     { refreshInterval: 5000 },
   )
@@ -70,7 +71,7 @@ export function ProviderDonutChart({ tenantId }: Props) {
           <h3 className="text-base font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 to-purple-400">
             Spend by Provider
           </h3>
-          <p className="text-xs text-muted-foreground mt-0.5">All-time cost breakdown</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Last {days === 1 ? '24h' : `${days} days`}</p>
         </div>
 
         {!res ? (

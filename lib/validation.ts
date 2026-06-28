@@ -43,3 +43,7 @@ export const anomalyQuerySchema = z.object({
   tenantId: z.string().uuid(),
   days: z.coerce.number().int().min(1).max(90).default(30),
 })
+
+export const daysOnlySchema = z.object({
+  days: z.coerce.number().int().min(1).max(90).default(30),
+})

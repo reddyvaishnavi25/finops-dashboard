@@ -8,20 +8,13 @@ import {
 
 const fetcher = (url: string) => fetch(url).then(r => r.json())
 
-export const PROVIDER_COLORS: Record<string, string> = {
-  OpenAI:    '#e91e63',
-  Anthropic: '#a855f7',
-  AWS:       '#22d3ee',
-  GCP:       '#f59e0b',
-}
-export const FALLBACK_COLORS = ['#10b981', '#6366f1', '#ec4899', '#84cc16']
+const TENANT_COLORS = ['#22d3ee', '#a855f7', '#e91e63', '#f59e0b', '#10b981', '#6366f1']
 
-function getColor(provider: string, idx: number) {
-  return PROVIDER_COLORS[provider] ?? FALLBACK_COLORS[idx % FALLBACK_COLORS.length]
+function getColor(idx: number) {
+  return TENANT_COLORS[idx % TENANT_COLORS.length]
 }
 
 interface Props {
-  tenantId: string
   days: number
 }
 
@@ -51,15 +44,17 @@ function CustomTooltip({ active, payload, label }: { active?: boolean; payload?:
   )
 }
 
-export function ProviderTrendChart({ tenantId, days }: Props) {
+export function TenantComparisonChart({ days }: Props) {
   const { data: res } = useSWR<{ data: Record<string, unknown>[] }>(
-    tenantId ? `/api/summary/providers-trend?tenantId=${tenantId}&days=${days}` : null,
+    `/api/summary/daily-by-tenant?days=${days}`,
     fetcher,
-    { refreshInterval: 5000 },
+    { refreshInterval: 10000 },
   )
 
   const rawData = res?.data ?? []
-  const providers = rawData.length
+  // Collect names from ALL rows — not just row[0] — so a tenant that had zero
+  // spend on the earliest day still gets a Line drawn across the full range.
+  const tenants = rawData.length
     ? [...new Set(rawData.flatMap(row => Object.keys(row).filter(k => k !== 'day')))]
     : []
 
@@ -68,7 +63,7 @@ export function ProviderTrendChart({ tenantId, days }: Props) {
 
   return (
     <div
-      className="rounded-xl p-6 overflow-hidden relative group h-full"
+      className="rounded-xl p-6 overflow-hidden relative group"
       style={{
         background: 'linear-gradient(135deg, rgba(20,30,60,0.5) 0%, rgba(40,20,80,0.2) 100%)',
         border: '1px solid rgba(136,100,255,0.15)',
@@ -77,14 +72,14 @@ export function ProviderTrendChart({ tenantId, days }: Props) {
     >
       <div
         className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
-        style={{ background: 'radial-gradient(circle at center, rgba(168,85,247,0.05), transparent)' }}
+        style={{ background: 'radial-gradient(circle at center, rgba(34,211,238,0.04), transparent)' }}
       />
       <div className="relative z-10">
         <div className="mb-4">
           <h3 className="text-base font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 to-purple-400">
-            Provider Cost Trends
+            Daily Spend by Tenant
           </h3>
-          <p className="text-xs text-muted-foreground mt-0.5">Daily spend per AI provider</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Compare burn rate across all clients</p>
         </div>
 
         {!res ? (
@@ -106,12 +101,12 @@ export function ProviderTrendChart({ tenantId, days }: Props) {
                 tickFormatter={v => `$${Number(v).toFixed(1)}`}
               />
               <Tooltip content={<CustomTooltip />} />
-              {providers.map((p, i) => (
+              {tenants.map((t, i) => (
                 <Line
-                  key={p}
+                  key={t}
                   type="monotone"
-                  dataKey={p}
-                  stroke={getColor(p, i)}
+                  dataKey={t}
+                  stroke={getColor(i)}
                   strokeWidth={2}
                   dot={false}
                   isAnimationActive={true}
@@ -124,10 +119,10 @@ export function ProviderTrendChart({ tenantId, days }: Props) {
         )}
 
         <div className="flex flex-wrap gap-4 mt-4 pt-3 border-t border-cyan-400/10">
-          {providers.map((p, i) => (
-            <div key={p} className="flex items-center gap-1.5">
-              <div className="w-3 h-3 rounded-full animate-pulse" style={{ backgroundColor: getColor(p, i) }} />
-              <span className="text-xs text-muted-foreground">{p}</span>
+          {tenants.map((t, i) => (
+            <div key={t} className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: getColor(i) }} />
+              <span className="text-xs text-muted-foreground">{t}</span>
             </div>
           ))}
         </div>
