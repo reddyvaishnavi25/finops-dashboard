@@ -47,3 +47,9 @@ export const anomalyQuerySchema = z.object({
 export const daysOnlySchema = z.object({
   days: z.coerce.number().int().min(1).max(90).default(30),
 })
+
+export const budgetUpsertSchema = z.object({
+  tenant_id: z.string().uuid(),
+  monthly_budget: z.number().positive().max(1_000_000),
+  alert_threshold: z.number().min(0.01).max(1.0).default(0.80),
+})

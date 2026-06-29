@@ -2,11 +2,11 @@
 
 import useSWR from 'swr'
 import { PageShell } from '@/components/page-shell'
-import type { TenantWithSummary } from '@/lib/types'
+import type { TenantBudgetRow } from '@/lib/types'
 
 const fetcher = (url: string) => fetch(url).then(r => r.json())
 
-const TIER_BUDGETS: Record<string, number> = {
+const TIER_DEFAULTS: Record<string, number> = {
   enterprise: 10000,
   growth: 5000,
   starter: 2000,
@@ -45,7 +45,7 @@ function BudgetBar({ cost, budget }: { cost: number; budget: number }) {
 }
 
 export default function BillingPage() {
-  const { data: res } = useSWR<{ data: TenantWithSummary[] }>('/api/summary/all-tenants', fetcher, { refreshInterval: 10000 })
+  const { data: res } = useSWR<{ data: TenantBudgetRow[] }>('/api/settings/budgets', fetcher, { refreshInterval: 10000 })
   const tenants = res?.data ?? []
 
   return (
@@ -73,7 +73,7 @@ export default function BillingPage() {
             <tbody>
               {tenants.map(t => {
                 const cost = Number(t.total_cost ?? 0)
-                const budget = TIER_BUDGETS[t.subscription_tier] ?? 2000
+                const budget = t.monthly_budget ? Number(t.monthly_budget) : (TIER_DEFAULTS[t.subscription_tier] ?? 2000)
                 const tierStyle = TIER_STYLES[t.subscription_tier] ?? TIER_STYLES.starter
                 const lastActive = t.last_activity
                   ? new Date(t.last_activity).toLocaleString()

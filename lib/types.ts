@@ -115,3 +115,15 @@ export interface WorkspaceDetail {
   total_requests: string
   total_tokens: string
 }
+
+export interface TenantBudgetRow {
+  tenant_id: string
+  company_name: string
+  subscription_tier: string
+  total_cost: string | null
+  total_requests: string | null
+  total_tokens: string | null
+  last_activity: string | null
+  monthly_budget: string | null
+  alert_threshold: string | null
+}
